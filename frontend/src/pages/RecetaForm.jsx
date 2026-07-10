@@ -174,6 +174,7 @@ export default function RecetaForm() {
       unidad_venta: unidadVenta,
       lotes: Number(lotes) || 1,
       merma_pct: unidadVenta === 'kilo' ? mermaNum : null,
+      peso_final_kg: unidadVenta === 'kilo' ? pesoFinalKg : null,
       margen_base: Number(margenPct) || 0,
       precio_final,
       ingredientes: filasValidas.map((f) => ({

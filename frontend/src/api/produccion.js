@@ -5,9 +5,15 @@ import { supabase } from '../lib/supabaseClient';
 import { lanzarError } from './errores';
 
 export const produccionApi = {
-  async listar(fecha) {
-    let query = supabase.from('produccion_diaria_detalle').select('*').order('receta_nombre');
-    if (fecha) query = query.eq('fecha', fecha);
+  // Acepta una fecha exacta ("2026-07-10") o un rango { desde, hasta }.
+  async listar(filtro) {
+    let query = supabase.from('produccion_diaria_detalle').select('*').order('fecha', { ascending: false });
+    if (typeof filtro === 'string') {
+      query = query.eq('fecha', filtro);
+    } else if (filtro) {
+      if (filtro.desde) query = query.gte('fecha', filtro.desde);
+      if (filtro.hasta) query = query.lte('fecha', filtro.hasta);
+    }
     const { data, error } = await query;
     if (error) lanzarError(error.message);
     return data;

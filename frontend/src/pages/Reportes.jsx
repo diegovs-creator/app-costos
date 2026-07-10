@@ -4,6 +4,7 @@ import { reportesApi } from '../api/client';
 import { formatoMoneda, formatoFecha, CATEGORIAS } from '../utils/formato';
 import { exportarCsv } from '../utils/exportarCsv';
 import IngredienteFormModal from '../components/ingredientes/IngredienteFormModal';
+import Administracion from '../components/reportes/Administracion';
 
 function BotonExportar({ onClick }) {
   return (
@@ -51,6 +52,7 @@ export default function Reportes() {
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [ingredienteAEditar, setIngredienteAEditar] = useState(null);
+  const [pestana, setPestana] = useState('costos');
 
   const cargar = useCallback(() => {
     const params = {};
@@ -91,6 +93,31 @@ export default function Reportes() {
         <p className="mt-1 text-sm text-gray-500">Costos, precios, ganancias e ingredientes más caros.</p>
       </div>
 
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => setPestana('costos')}
+          className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+            pestana === 'costos' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Costos y precios
+        </button>
+        <button
+          type="button"
+          onClick={() => setPestana('administracion')}
+          className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+            pestana === 'administracion' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Administración
+        </button>
+      </div>
+
+      {pestana === 'administracion' && <Administracion />}
+
+      {pestana === 'costos' && (
+        <>
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-1.5 overflow-x-auto">
           {FILTROS_CATEGORIA.map((f) => (
@@ -296,6 +323,8 @@ export default function Reportes() {
             cargarIngredientesCaros();
           }}
         />
+      )}
+        </>
       )}
     </div>
   );
