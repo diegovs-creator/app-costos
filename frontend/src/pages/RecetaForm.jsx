@@ -9,6 +9,7 @@ import {
   calcularPrecioMarkup,
   calcularPrecioMargen,
 } from '../utils/calculosReceta';
+import { normalizarTexto } from '../utils/texto';
 import IngredienteAutocomplete from '../components/recetas/IngredienteAutocomplete';
 import IngredienteFormModal from '../components/ingredientes/IngredienteFormModal';
 import ComparadorPrecios, { precioSegunEleccion } from '../components/recetas/ComparadorPrecios';
@@ -46,6 +47,7 @@ export default function RecetaForm() {
   const [unidadVenta, setUnidadVenta] = useState('unidades');
   const [lotes, setLotes] = useState('1');
   const [mermaPct, setMermaPct] = useState('10');
+  const [ingredienteReferenciaId, setIngredienteReferenciaId] = useState(null);
   const [filas, setFilas] = useState([filaVacia()]);
   const [margenPct, setMargenPct] = useState('50');
   const [margenesPorCategoria, setMargenesPorCategoria] = useState({});
@@ -76,6 +78,7 @@ export default function RecetaForm() {
         setUnidadVenta(receta.unidad_venta || 'unidades');
         setLotes(String(receta.lotes));
         if (receta.merma_pct != null) setMermaPct(String(receta.merma_pct));
+        setIngredienteReferenciaId(receta.ingrediente_referencia_id ?? null);
         setMargenPct(String(receta.margen_individual ?? receta.margen_base));
         setFilas(
           receta.ingredientes.length > 0 ? receta.ingredientes.map(filaDesdeIngredienteReceta) : [filaVacia()]
@@ -100,12 +103,30 @@ export default function RecetaForm() {
     setFilas((prev) => prev.map((f) => (f.id === filaId ? { ...f, ...patch } : f)));
   }
 
+  function seleccionarIngrediente(fila, ingrediente) {
+    actualizarFila(fila.id, { ingrediente, ingredienteTexto: ingrediente.nombre });
+    // Si es el primer ingrediente que se llama "harina" (o similar) y todavia
+    // no hay referencia elegida, se sugiere solo — el usuario la puede cambiar.
+    if (ingredienteReferenciaId == null && normalizarTexto(ingrediente.nombre).includes('harina')) {
+      setIngredienteReferenciaId(ingrediente.id);
+    }
+  }
+
+  function manejarCambioTexto(fila, texto) {
+    if (fila.ingrediente?.id === ingredienteReferenciaId) setIngredienteReferenciaId(null);
+    actualizarFila(fila.id, { ingredienteTexto: texto, ingrediente: null });
+  }
+
   function agregarFila() {
     setFilas((prev) => [...prev, filaVacia()]);
   }
 
   function quitarFila(filaId) {
-    setFilas((prev) => (prev.length > 1 ? prev.filter((f) => f.id !== filaId) : prev));
+    setFilas((prev) => {
+      const fila = prev.find((f) => f.id === filaId);
+      if (fila?.ingrediente?.id === ingredienteReferenciaId) setIngredienteReferenciaId(null);
+      return prev.length > 1 ? prev.filter((f) => f.id !== filaId) : prev;
+    });
   }
 
   // Calcula el costo en vivo de cada fila para mostrar preview (el backend recalcula el definitivo al guardar)
@@ -175,6 +196,7 @@ export default function RecetaForm() {
       lotes: Number(lotes) || 1,
       merma_pct: unidadVenta === 'kilo' ? mermaNum : null,
       peso_final_kg: unidadVenta === 'kilo' ? pesoFinalKg : null,
+      ingrediente_referencia_id: ingredienteReferenciaId,
       margen_base: Number(margenPct) || 0,
       precio_final,
       ingredientes: filasValidas.map((f) => ({
@@ -317,14 +339,12 @@ export default function RecetaForm() {
                   <div className="flex-1">
                     <IngredienteAutocomplete
                       texto={fila.ingredienteTexto}
-                      onChangeTexto={(t) => actualizarFila(fila.id, { ingredienteTexto: t, ingrediente: null })}
-                      onSeleccionar={(ing) =>
-                        actualizarFila(fila.id, { ingrediente: ing, ingredienteTexto: ing.nombre })
-                      }
+                      onChangeTexto={(t) => manejarCambioTexto(fila, t)}
+                      onSeleccionar={(ing) => seleccionarIngrediente(fila, ing)}
                       onCrearNuevo={(texto) => setModalCrear({ filaId: fila.id, nombreSugerido: texto })}
                     />
                   </div>
-                  <div className="sm:w-40">
+                  <div className="sm:w-32">
                     <input
                       type="text"
                       value={fila.cantidadTexto}
@@ -333,10 +353,29 @@ export default function RecetaForm() {
                       className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
-                  <div className="flex items-center justify-between gap-2 sm:w-36 sm:justify-end">
+                  <div className="flex items-center justify-between gap-2 sm:w-44 sm:justify-end">
                     <span className="text-sm font-medium text-gray-700">
                       {fila.costo != null ? formatoMoneda.format(fila.costo) : '-'}
                     </span>
+                    {fila.ingrediente && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setIngredienteReferenciaId((actual) =>
+                            actual === fila.ingrediente.id ? null : fila.ingrediente.id
+                          )
+                        }
+                        title="Usar este ingrediente como referencia para cargar producción"
+                        className={`rounded-md p-1.5 ${
+                          ingredienteReferenciaId === fila.ingrediente.id
+                            ? 'text-amber-500'
+                            : 'text-gray-300 hover:text-amber-400'
+                        }`}
+                        aria-label="Marcar como ingrediente de referencia"
+                      >
+                        {ingredienteReferenciaId === fila.ingrediente.id ? '★' : '☆'}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => quitarFila(fila.id)}
@@ -361,6 +400,10 @@ export default function RecetaForm() {
           >
             <span aria-hidden="true">+</span> Agregar ingrediente
           </button>
+          <p className="mt-2 text-xs text-gray-400">
+            ★ Marcá un ingrediente como referencia (ej: la harina) para poder cargar Producción diciendo "cuánto usé
+            de ese ingrediente" en vez de una cantidad suelta.
+          </p>
         </div>
 
         {/* Precios */}

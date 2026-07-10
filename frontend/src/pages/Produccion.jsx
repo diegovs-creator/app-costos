@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { empleadoApi } from '../api/empleado';
 import { produccionApi } from '../api/produccion';
 import ConfirmDialog from '../components/layout/ConfirmDialog';
+import { parsearCantidad, convertirAUnidad } from '../utils/calculosReceta';
 
 const MOTIVOS = [
   { valor: 'accidente', label: 'Accidente (se rompió/dañó)' },
@@ -16,6 +17,8 @@ export default function Produccion() {
   const [fecha, setFecha] = useState(hoyISO());
   const [recetas, setRecetas] = useState([]);
   const [recetaId, setRecetaId] = useState('');
+  const [modoCarga, setModoCarga] = useState('referencia'); // 'referencia' | 'directa'
+  const [cantidadReferenciaTexto, setCantidadReferenciaTexto] = useState('');
   const [cantidadProducida, setCantidadProducida] = useState('');
   const [cantidadPerdida, setCantidadPerdida] = useState('');
   const [motivoPerdida, setMotivoPerdida] = useState(MOTIVOS[0].valor);
@@ -42,15 +45,50 @@ export default function Produccion() {
 
   useEffect(cargarEntradas, [fecha]);
 
+  const receta = useMemo(() => recetas.find((r) => r.id === Number(recetaId)) || null, [recetas, recetaId]);
+  const tieneReferencia = Boolean(receta?.referencia_nombre);
+
+  function elegirReceta(idTexto) {
+    setRecetaId(idTexto);
+    const nuevaReceta = recetas.find((r) => r.id === Number(idTexto));
+    setModoCarga(nuevaReceta?.referencia_nombre ? 'referencia' : 'directa');
+    setCantidadReferenciaTexto('');
+    setCantidadProducida('');
+  }
+
+  // A partir de "cuanto se uso del ingrediente de referencia", calcula cuanto
+  // se produjo realmente (factor de escala respecto de como esta armada la receta).
+  const calculoPorReferencia = useMemo(() => {
+    if (!receta || !tieneReferencia || !cantidadReferenciaTexto.trim()) return null;
+    const { cantidad, medida } = parsearCantidad(cantidadReferenciaTexto, receta.referencia_medida);
+    if (cantidad == null || cantidad <= 0 || !medida) return { error: 'Cantidad inválida. Ej: 5kg' };
+    const cantidadEnMedidaBase = convertirAUnidad(cantidad, medida, receta.referencia_medida);
+    if (cantidadEnMedidaBase == null) {
+      return { error: `Unidad "${medida}" incompatible con "${receta.referencia_medida}"` };
+    }
+    const factor = cantidadEnMedidaBase / receta.referencia_cantidad_base;
+    const base = receta.unidad_venta === 'kilo' ? receta.peso_final_kg : receta.lotes;
+    if (!base) return { error: 'Esta receta no tiene rendimiento base cargado.' };
+    return { cantidadProducida: Number((factor * base).toFixed(3)) };
+  }, [receta, tieneReferencia, cantidadReferenciaTexto]);
+
   async function manejarSubmit(e) {
     e.preventDefault();
     setError('');
 
-    const producida = Number(cantidadProducida);
-    const perdida = cantidadPerdida.trim() === '' ? 0 : Number(cantidadPerdida);
-
     if (!recetaId) return setError('Elegí una receta.');
-    if (Number.isNaN(producida) || producida < 0) return setError('La cantidad producida no es válida.');
+
+    let producida;
+    if (modoCarga === 'referencia') {
+      if (!calculoPorReferencia) return setError(`Ingresá cuánto usaste de ${receta.referencia_nombre}.`);
+      if (calculoPorReferencia.error) return setError(calculoPorReferencia.error);
+      producida = calculoPorReferencia.cantidadProducida;
+    } else {
+      producida = Number(cantidadProducida);
+      if (Number.isNaN(producida) || producida < 0) return setError('La cantidad producida no es válida.');
+    }
+
+    const perdida = cantidadPerdida.trim() === '' ? 0 : Number(cantidadPerdida);
     if (Number.isNaN(perdida) || perdida < 0) return setError('La cantidad perdida no es válida.');
 
     setGuardando(true);
@@ -63,6 +101,7 @@ export default function Produccion() {
         motivo_perdida: perdida > 0 ? motivoPerdida : null,
       });
       setRecetaId('');
+      setCantidadReferenciaTexto('');
       setCantidadProducida('');
       setCantidadPerdida('');
       cargarEntradas();
@@ -110,7 +149,7 @@ export default function Produccion() {
           <span className="mb-1.5 block text-sm font-medium text-gray-700">Receta</span>
           <select
             value={recetaId}
-            onChange={(e) => setRecetaId(e.target.value)}
+            onChange={(e) => elegirReceta(e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           >
             <option value="">Seleccioná una receta...</option>
@@ -122,18 +161,65 @@ export default function Produccion() {
           </select>
         </label>
 
+        {receta && tieneReferencia && (
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setModoCarga('referencia')}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                modoCarga === 'referencia' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Por {receta.referencia_nombre}
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoCarga('directa')}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                modoCarga === 'directa' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Cantidad directa
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-gray-700">Cantidad producida</span>
-            <input
-              type="number"
-              min="0"
-              value={cantidadProducida}
-              onChange={(e) => setCantidadProducida(e.target.value)}
-              placeholder="Ej: 10"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-          </label>
+          {receta && tieneReferencia && modoCarga === 'referencia' ? (
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-gray-700">
+                Cuánto {receta.referencia_nombre} usaste
+              </span>
+              <input
+                type="text"
+                value={cantidadReferenciaTexto}
+                onChange={(e) => setCantidadReferenciaTexto(e.target.value)}
+                placeholder={`Ej: 5${receta.referencia_medida}`}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+              {calculoPorReferencia?.error && (
+                <p className="mt-1 text-xs text-red-600">{calculoPorReferencia.error}</p>
+              )}
+              {calculoPorReferencia?.cantidadProducida != null && (
+                <p className="mt-1 text-xs text-gray-500">
+                  ≈ produjiste <span className="font-medium text-gray-900">{calculoPorReferencia.cantidadProducida}</span>{' '}
+                  {receta.unidad_venta === 'kilo' ? 'kg' : 'unidades'}
+                </p>
+              )}
+            </label>
+          ) : (
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-gray-700">Cantidad producida</span>
+              <input
+                type="number"
+                min="0"
+                value={cantidadProducida}
+                onChange={(e) => setCantidadProducida(e.target.value)}
+                placeholder="Ej: 10"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </label>
+          )}
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
               Cantidad perdida <span className="font-normal text-gray-400">(opcional)</span>

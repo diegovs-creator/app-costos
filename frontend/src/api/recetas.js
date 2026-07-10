@@ -105,6 +105,10 @@ export const recetasApi = {
     if (unidad_venta === 'kilo' && (merma_pct == null || merma_pct < 0 || merma_pct >= 100)) {
       lanzarError('Porcentaje de merma invalido');
     }
+    const ingrediente_referencia_id =
+      payload.ingrediente_referencia_id && ingredientes.some((i) => i.ingrediente_id === payload.ingrediente_referencia_id)
+        ? payload.ingrediente_referencia_id
+        : null;
 
     const { costoIngredientes, costoEnvase, costoTotal, detalle, precioMarkup, precioMargen, gananciaEstimada } =
       await calcularCostos({ ingredientes, categoria, margen_base, margen_individual });
@@ -118,6 +122,7 @@ export const recetasApi = {
         unidad_venta,
         merma_pct,
         peso_final_kg: unidad_venta === 'kilo' ? payload.peso_final_kg : null,
+        ingrediente_referencia_id,
         costo_ingredientes: costoIngredientes,
         costo_envase: costoEnvase,
         costo_total: costoTotal,
@@ -158,6 +163,11 @@ export const recetasApi = {
     const merma_pct = unidad_venta === 'kilo' ? (payload.merma_pct ?? existente.merma_pct) : null;
     if (unidad_venta === 'kilo' && (merma_pct == null || merma_pct < 0 || merma_pct >= 100)) {
       lanzarError('Porcentaje de merma invalido');
+    }
+    let ingrediente_referencia_id = payload.ingrediente_referencia_id ?? existente.ingrediente_referencia_id;
+    if (Array.isArray(ingredientes) && ingrediente_referencia_id) {
+      const sigueEnLaReceta = ingredientes.some((i) => i.ingrediente_id === ingrediente_referencia_id);
+      if (!sigueEnLaReceta) ingrediente_referencia_id = null;
     }
 
     let costoIngredientes = existente.costo_ingredientes;
@@ -201,6 +211,7 @@ export const recetasApi = {
         unidad_venta,
         merma_pct,
         peso_final_kg: unidad_venta === 'kilo' ? (payload.peso_final_kg ?? existente.peso_final_kg) : null,
+        ingrediente_referencia_id,
         costo_ingredientes: costoIngredientes,
         costo_envase: costoEnvase,
         costo_total: costoTotal,

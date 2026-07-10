@@ -15,6 +15,13 @@ export function unidadesCompatibles(medidaBase, medidaUsada) {
   return Boolean(tabla && medidaUsada in tabla);
 }
 
+// Convierte una cantidad de una unidad a otra compatible (ej: 500 g -> 0.5 kg).
+// Devuelve null si las unidades no son compatibles entre si.
+export function convertirAUnidad(cantidad, medidaOrigen, medidaDestino) {
+  if (!unidadesCompatibles(medidaDestino, medidaOrigen)) return null;
+  return cantidad * CONVERSIONES[medidaDestino][medidaOrigen];
+}
+
 export function costoIngredienteUsado(ingrediente, cantidadUsada, medidaUsada) {
   if (!ingrediente || !unidadesCompatibles(ingrediente.medida, medidaUsada)) return null;
   const factor = CONVERSIONES[ingrediente.medida][medidaUsada];
