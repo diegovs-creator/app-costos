@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: '📊', end: true },
@@ -35,6 +36,22 @@ function NavItems({ onNavigate }) {
   );
 }
 
+function SesionFooter() {
+  const { sesion, cerrarSesion } = useAuth();
+  return (
+    <div className="border-t border-gray-200 px-3 py-3">
+      <p className="truncate px-2 text-xs text-gray-400">{sesion?.user?.email}</p>
+      <button
+        type="button"
+        onClick={cerrarSesion}
+        className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
+      >
+        <span aria-hidden="true">🚪</span> Cerrar sesión
+      </button>
+    </div>
+  );
+}
+
 export default function Layout() {
   const [menuAbierto, setMenuAbierto] = useState(false);
 
@@ -49,6 +66,7 @@ export default function Layout() {
         <div className="flex-1 overflow-y-auto py-4">
           <NavItems />
         </div>
+        <SesionFooter />
       </aside>
 
       {/* Navbar móvil */}
@@ -93,6 +111,7 @@ export default function Layout() {
             <div className="flex-1 overflow-y-auto py-4">
               <NavItems onNavigate={() => setMenuAbierto(false)} />
             </div>
+            <SesionFooter />
           </div>
         </div>
       )}
