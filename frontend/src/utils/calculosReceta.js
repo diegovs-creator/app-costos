@@ -32,6 +32,21 @@ export function calcularPrecioMargen(costo, porcentaje) {
   return costo / (1 - porcentaje / 100);
 }
 
+// Peso total (en kg) de las filas de una receta, para el modo de venta "por kilo".
+// Suma kg/g directo y l/ml como si fuera kg (1 litro ~ 1kg). Nunca cuenta
+// envases ni ingredientes medidos en "unidades" (no tienen peso convertible).
+const FACTOR_PESO_KG = { kg: 1, g: 0.001, l: 1, ml: 0.001 };
+
+export function calcularPesoTotalKg(filas) {
+  return filas.reduce((acc, fila) => {
+    if (!fila.ingrediente || fila.ingrediente.tipo === 'envase') return acc;
+    const { cantidad, medida } = fila.cantidadParseada || {};
+    const factor = medida ? FACTOR_PESO_KG[medida] : undefined;
+    if (cantidad == null || factor == null) return acc;
+    return acc + cantidad * factor;
+  }, 0);
+}
+
 const NORMALIZAR_UNIDAD = {
   kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg',
   g: 'g', gr: 'g', grs: 'g', gramo: 'g', gramos: 'g',

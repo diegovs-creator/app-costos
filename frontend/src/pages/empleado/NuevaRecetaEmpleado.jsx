@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { empleadoApi } from '../../api/empleado';
 import { CATEGORIAS } from '../../utils/formato';
-import { parsearCantidad } from '../../utils/calculosReceta';
+import { parsearCantidad, calcularPesoTotalKg } from '../../utils/calculosReceta';
 import IngredienteAutocompletePublico from '../../components/empleado/IngredienteAutocompletePublico';
 
 let contadorFilas = 0;
@@ -15,7 +15,9 @@ export default function NuevaRecetaEmpleado() {
   const navigate = useNavigate();
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState('Pasteleria');
+  const [unidadVenta, setUnidadVenta] = useState('unidades');
   const [lotes, setLotes] = useState('1');
+  const [mermaPct, setMermaPct] = useState('10');
   const [filas, setFilas] = useState([filaVacia()]);
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -32,6 +34,19 @@ export default function NuevaRecetaEmpleado() {
     setFilas((prev) => (prev.length > 1 ? prev.filter((f) => f.id !== filaId) : prev));
   }
 
+  // Solo para calcular el peso (sin ningun dato de costo: ingredientes_publico no tiene precio).
+  const filasConCantidad = useMemo(() => {
+    return filas.map((fila) => {
+      if (!fila.ingrediente || !fila.cantidadTexto.trim()) return { ...fila, cantidadParseada: null };
+      const { cantidad, medida } = parsearCantidad(fila.cantidadTexto, fila.ingrediente.medida);
+      return { ...fila, cantidadParseada: cantidad != null && medida ? { cantidad, medida } : null };
+    });
+  }, [filas]);
+
+  const pesoCrudoKg = useMemo(() => calcularPesoTotalKg(filasConCantidad), [filasConCantidad]);
+  const mermaNum = Number(mermaPct) || 0;
+  const pesoFinalKg = unidadVenta === 'kilo' ? pesoCrudoKg * (1 - mermaNum / 100) : null;
+
   async function manejarSubmit(e) {
     e.preventDefault();
     setError('');
@@ -40,6 +55,10 @@ export default function NuevaRecetaEmpleado() {
 
     const filasCompletas = filas.filter((f) => f.ingrediente && f.cantidadTexto.trim());
     if (filasCompletas.length === 0) return setError('Agregá al menos un ingrediente.');
+
+    if (unidadVenta === 'kilo' && (mermaPct.trim() === '' || mermaNum < 0 || mermaNum >= 100)) {
+      return setError('Ingresá un porcentaje de merma válido (entre 0 y 100).');
+    }
 
     const ingredientesPayload = [];
     for (const fila of filasCompletas) {
@@ -55,7 +74,9 @@ export default function NuevaRecetaEmpleado() {
       await empleadoApi.crearReceta({
         nombre: nombre.trim(),
         categoria,
+        unidadVenta,
         lotes: Number(lotes) || 1,
+        mermaPct: mermaNum,
         ingredientes: ingredientesPayload,
       });
       navigate('/');
@@ -85,23 +106,55 @@ export default function NuevaRecetaEmpleado() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-gray-700">Categoría</span>
-              <select
-                value={categoria}
-                onChange={(e) => setCategoria(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">Categoría</span>
+            <select
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              {CATEGORIAS.map((c) => (
+                <option key={c.valor} value={c.valor}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div>
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">Se vende</span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setUnidadVenta('unidades')}
+                className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  unidadVenta === 'unidades'
+                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
               >
-                {CATEGORIAS.map((c) => (
-                  <option key={c.valor} value={c.valor}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                🔢 Por unidades
+              </button>
+              <button
+                type="button"
+                onClick={() => setUnidadVenta('kilo')}
+                className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  unidadVenta === 'kilo'
+                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                ⚖️ Por kilo
+              </button>
+            </div>
+          </div>
+
+          {unidadVenta === 'unidades' ? (
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-gray-700">Rinde (lotes)</span>
+              <span className="mb-1.5 block text-sm font-medium text-gray-700">
+                Cantidad producida <span className="font-normal text-gray-400">(ej: 10 unidades)</span>
+              </span>
               <input
                 type="number"
                 min="1"
@@ -110,7 +163,27 @@ export default function NuevaRecetaEmpleado() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </label>
-          </div>
+          ) : (
+            <>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Merma por cocción (%) <span className="font-normal text-gray-400">(pérdida de peso en el horno)</span>
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  max="99"
+                  value={mermaPct}
+                  onChange={(e) => setMermaPct(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+              </label>
+              <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-sm text-gray-500">
+                Peso de la receta: <span className="font-medium text-gray-900">{pesoCrudoKg.toFixed(3)} kg</span> ·
+                Vendible con merma: <span className="font-medium text-gray-900">{pesoFinalKg?.toFixed(3) ?? '-'} kg</span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-5">

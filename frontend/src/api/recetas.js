@@ -97,8 +97,13 @@ export const recetasApi = {
 
   async crear(payload) {
     const { nombre, categoria, lotes, ingredientes, margen_base, margen_individual, precio_final } = payload;
+    const unidad_venta = payload.unidad_venta || 'unidades';
+    const merma_pct = unidad_venta === 'kilo' ? payload.merma_pct : null;
     if (!nombre || !categoria || !Array.isArray(ingredientes) || ingredientes.length === 0) {
       lanzarError('Faltan campos requeridos (nombre, categoria, ingredientes)');
+    }
+    if (unidad_venta === 'kilo' && (merma_pct == null || merma_pct < 0 || merma_pct >= 100)) {
+      lanzarError('Porcentaje de merma invalido');
     }
 
     const { costoIngredientes, costoEnvase, costoTotal, detalle, precioMarkup, precioMargen, gananciaEstimada } =
@@ -110,6 +115,8 @@ export const recetasApi = {
         nombre: nombre.trim(),
         categoria,
         lotes: lotes || 1,
+        unidad_venta,
+        merma_pct,
         costo_ingredientes: costoIngredientes,
         costo_envase: costoEnvase,
         costo_total: costoTotal,
@@ -146,6 +153,11 @@ export const recetasApi = {
 
     const { nombre, categoria, lotes, ingredientes, margen_base, margen_individual, precio_final } = payload;
     const categoriaFinal = categoria || existente.categoria;
+    const unidad_venta = payload.unidad_venta ?? existente.unidad_venta;
+    const merma_pct = unidad_venta === 'kilo' ? (payload.merma_pct ?? existente.merma_pct) : null;
+    if (unidad_venta === 'kilo' && (merma_pct == null || merma_pct < 0 || merma_pct >= 100)) {
+      lanzarError('Porcentaje de merma invalido');
+    }
 
     let costoIngredientes = existente.costo_ingredientes;
     let costoEnvase = existente.costo_envase;
@@ -185,6 +197,8 @@ export const recetasApi = {
         nombre: nombre ?? existente.nombre,
         categoria: categoriaFinal,
         lotes: lotes ?? existente.lotes,
+        unidad_venta,
+        merma_pct,
         costo_ingredientes: costoIngredientes,
         costo_envase: costoEnvase,
         costo_total: costoTotal,

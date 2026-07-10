@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { recetasApi, configuracionApi } from '../api/client';
 import { formatoMoneda, CATEGORIAS } from '../utils/formato';
-import { costoIngredienteUsado, parsearCantidad } from '../utils/calculosReceta';
+import {
+  costoIngredienteUsado,
+  parsearCantidad,
+  calcularPesoTotalKg,
+  calcularPrecioMarkup,
+  calcularPrecioMargen,
+} from '../utils/calculosReceta';
 import IngredienteAutocomplete from '../components/recetas/IngredienteAutocomplete';
 import IngredienteFormModal from '../components/ingredientes/IngredienteFormModal';
 import ComparadorPrecios, { precioSegunEleccion } from '../components/recetas/ComparadorPrecios';
@@ -37,7 +43,9 @@ export default function RecetaForm() {
 
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState('Pasteleria');
+  const [unidadVenta, setUnidadVenta] = useState('unidades');
   const [lotes, setLotes] = useState('1');
+  const [mermaPct, setMermaPct] = useState('10');
   const [filas, setFilas] = useState([filaVacia()]);
   const [margenPct, setMargenPct] = useState('50');
   const [margenesPorCategoria, setMargenesPorCategoria] = useState({});
@@ -64,7 +72,9 @@ export default function RecetaForm() {
       .then((receta) => {
         setNombre(receta.nombre);
         setCategoria(receta.categoria);
+        setUnidadVenta(receta.unidad_venta || 'unidades');
         setLotes(String(receta.lotes));
+        if (receta.merma_pct != null) setMermaPct(String(receta.merma_pct));
         setMargenPct(String(receta.margen_individual ?? receta.margen_base));
         setFilas(
           receta.ingredientes.length > 0 ? receta.ingredientes.map(filaDesdeIngredienteReceta) : [filaVacia()]
@@ -127,6 +137,17 @@ export default function RecetaForm() {
     .reduce((acc, f) => acc + f.costo, 0);
   const costoTotal = costoIngredientes + costoEnvase;
 
+  const pesoCrudoKg = useMemo(() => calcularPesoTotalKg(filasConCosto), [filasConCosto]);
+  const mermaNum = Number(mermaPct) || 0;
+  const pesoFinalKg = unidadVenta === 'kilo' ? pesoCrudoKg * (1 - mermaNum / 100) : null;
+
+  // Precio total de la receta completa (mismos numeros que ComparadorPrecios calcula
+  // internamente) para poder mostrar tambien el precio por unidad/kilo.
+  const margenNum = Number(margenPct) || 0;
+  const precioMarkupTotal = calcularPrecioMarkup(costoTotal, margenNum);
+  const precioMargenTotal = calcularPrecioMargen(costoTotal, margenNum);
+  const divisorUnitario = unidadVenta === 'kilo' ? pesoFinalKg : Number(lotes) || 1;
+
   async function manejarSubmit(e) {
     e.preventDefault();
     setError('');
@@ -142,11 +163,16 @@ export default function RecetaForm() {
     if (precioElegido === 'custom' && (precio_final == null || precio_final < 0)) {
       return setError('Ingresa un precio personalizado valido.');
     }
+    if (unidadVenta === 'kilo' && (mermaNum < 0 || mermaNum >= 100 || mermaPct.trim() === '')) {
+      return setError('Ingresa un porcentaje de merma valido (entre 0 y 100).');
+    }
 
     const payload = {
       nombre: nombre.trim(),
       categoria,
+      unidad_venta: unidadVenta,
       lotes: Number(lotes) || 1,
+      merma_pct: unidadVenta === 'kilo' ? mermaNum : null,
       margen_base: Number(margenPct) || 0,
       precio_final,
       ingredientes: filasValidas.map((f) => ({
@@ -211,18 +237,72 @@ export default function RecetaForm() {
               ))}
             </select>
           </label>
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Lotes <span className="font-normal text-gray-400">(ej: produce 10 unidades)</span>
-            </span>
-            <input
-              type="number"
-              min="1"
-              value={lotes}
-              onChange={(e) => setLotes(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-          </label>
+          <div className="sm:col-span-3">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">Se vende</span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setUnidadVenta('unidades')}
+                className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  unidadVenta === 'unidades'
+                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                🔢 Por unidades
+              </button>
+              <button
+                type="button"
+                onClick={() => setUnidadVenta('kilo')}
+                className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  unidadVenta === 'kilo'
+                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                ⚖️ Por kilo
+              </button>
+            </div>
+          </div>
+
+          {unidadVenta === 'unidades' ? (
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-gray-700">
+                Cantidad producida <span className="font-normal text-gray-400">(ej: 10 unidades)</span>
+              </span>
+              <input
+                type="number"
+                min="1"
+                value={lotes}
+                onChange={(e) => setLotes(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </label>
+          ) : (
+            <>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Merma por cocción (%) <span className="font-normal text-gray-400">(pérdida de peso en el horno)</span>
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  max="99"
+                  value={mermaPct}
+                  onChange={(e) => setMermaPct(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+              </label>
+              <div className="flex flex-col justify-center rounded-lg bg-gray-50 px-3 py-2.5 text-sm">
+                <span className="text-gray-500">
+                  Peso de la receta: <span className="font-medium text-gray-900">{pesoCrudoKg.toFixed(3)} kg</span>
+                </span>
+                <span className="text-gray-500">
+                  Peso vendible (con merma): <span className="font-medium text-gray-900">{pesoFinalKg?.toFixed(3) ?? '-'} kg</span>
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Ingredientes */}
@@ -288,7 +368,8 @@ export default function RecetaForm() {
             <span>Costo ingredientes: {formatoMoneda.format(costoIngredientes)}</span>
             <span>Costo envase: {formatoMoneda.format(costoEnvase)}</span>
           </div>
-          <div className="mt-4">
+          <p className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-400">Total de la receta completa</p>
+          <div className="mt-2">
             <ComparadorPrecios
               costoTotal={costoTotal}
               margenPct={margenPct}
@@ -299,6 +380,38 @@ export default function RecetaForm() {
               setPrecioCustomTexto={setPrecioCustomTexto}
             />
           </div>
+
+          <p className="mt-5 text-xs font-medium uppercase tracking-wide text-gray-400">
+            Precio por {unidadVenta === 'kilo' ? 'kilo' : 'unidad'}
+          </p>
+          {divisorUnitario > 0 ? (
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-gray-200 p-3">
+                <p className="text-xs text-gray-500">Costo</p>
+                <p className="text-base font-semibold text-gray-900">
+                  {formatoMoneda.format(costoTotal / divisorUnitario)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-200 p-3">
+                <p className="text-xs text-gray-500">Markup ({margenNum}%)</p>
+                <p className="text-base font-semibold text-gray-900">
+                  {formatoMoneda.format(precioMarkupTotal / divisorUnitario)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-200 p-3">
+                <p className="text-xs text-gray-500">Margen ({margenNum}%)</p>
+                <p className="text-base font-semibold text-gray-900">
+                  {precioMargenTotal != null ? formatoMoneda.format(precioMargenTotal / divisorUnitario) : 'N/A'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-gray-400">
+              {unidadVenta === 'kilo'
+                ? 'Agregá ingredientes medidos en kg/g/l/ml para calcular el peso.'
+                : 'Ingresá la cantidad producida arriba.'}
+            </p>
+          )}
         </div>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
