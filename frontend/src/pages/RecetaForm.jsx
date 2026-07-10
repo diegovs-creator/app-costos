@@ -46,11 +46,14 @@ export default function RecetaForm() {
   const [unidadVenta, setUnidadVenta] = useState('unidades');
   const [lotes, setLotes] = useState('1');
   const [mermaPct, setMermaPct] = useState('10');
+  const [tiempoHorneadoMin, setTiempoHorneadoMin] = useState('');
+  const [costoHoraHorno, setCostoHoraHorno] = useState(0);
   const [filas, setFilas] = useState([filaVacia()]);
   const [margenPct, setMargenPct] = useState('50');
   const [margenesPorCategoria, setMargenesPorCategoria] = useState({});
   const [precioElegido, setPrecioElegido] = useState('margen');
   const [precioCustomTexto, setPrecioCustomTexto] = useState('');
+  const [precioPropioTexto, setPrecioPropioTexto] = useState('');
   const [modalCrear, setModalCrear] = useState(null); // { filaId, nombreSugerido }
   const [cargando, setCargando] = useState(esEdicion);
   const [guardando, setGuardando] = useState(false);
@@ -63,6 +66,7 @@ export default function RecetaForm() {
       setMargenesPorCategoria(mapa);
       if (!esEdicion && mapa['Pasteleria'] != null) setMargenPct(String(mapa['Pasteleria']));
     });
+    configuracionApi.obtenerCostoHoraHorno().then(setCostoHoraHorno).catch(() => {});
   }, [esEdicion]);
 
   useEffect(() => {
@@ -75,6 +79,7 @@ export default function RecetaForm() {
         setUnidadVenta(receta.unidad_venta || 'unidades');
         setLotes(String(receta.lotes));
         if (receta.merma_pct != null) setMermaPct(String(receta.merma_pct));
+        if (receta.tiempo_horneado_min != null) setTiempoHorneadoMin(String(receta.tiempo_horneado_min));
         setMargenPct(String(receta.margen_individual ?? receta.margen_base));
         setFilas(
           receta.ingredientes.length > 0 ? receta.ingredientes.map(filaDesdeIngredienteReceta) : [filaVacia()]
@@ -135,7 +140,8 @@ export default function RecetaForm() {
   const costoEnvase = filasConCosto
     .filter((f) => f.ingrediente && f.ingrediente.tipo === 'envase' && f.costo != null)
     .reduce((acc, f) => acc + f.costo, 0);
-  const costoTotal = costoIngredientes + costoEnvase;
+  const costoEnergia = ((Number(tiempoHorneadoMin) || 0) / 60) * costoHoraHorno;
+  const costoTotal = costoIngredientes + costoEnvase + costoEnergia;
 
   const pesoCrudoKg = useMemo(() => calcularPesoTotalKg(filasConCosto), [filasConCosto]);
   const mermaNum = Number(mermaPct) || 0;
@@ -173,6 +179,7 @@ export default function RecetaForm() {
       unidad_venta: unidadVenta,
       lotes: Number(lotes) || 1,
       merma_pct: unidadVenta === 'kilo' ? mermaNum : null,
+      tiempo_horneado_min: tiempoHorneadoMin.trim() === '' ? null : Number(tiempoHorneadoMin) || 0,
       margen_base: Number(margenPct) || 0,
       precio_final,
       ingredientes: filasValidas.map((f) => ({
@@ -303,6 +310,20 @@ export default function RecetaForm() {
               </div>
             </>
           )}
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Tiempo de horneado (min) <span className="font-normal text-gray-400">(opcional, para el costo de energía)</span>
+            </span>
+            <input
+              type="number"
+              min="0"
+              value={tiempoHorneadoMin}
+              onChange={(e) => setTiempoHorneadoMin(e.target.value)}
+              placeholder="Ej: 40"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+          </label>
         </div>
 
         {/* Ingredientes */}
@@ -364,9 +385,10 @@ export default function RecetaForm() {
         {/* Precios */}
         <div className="rounded-xl border border-gray-200 bg-white p-5">
           <h2 className="text-sm font-semibold text-gray-900">Precio de venta</h2>
-          <div className="mt-3 flex gap-4 text-xs text-gray-500">
+          <div className="mt-3 flex flex-wrap gap-4 text-xs text-gray-500">
             <span>Costo ingredientes: {formatoMoneda.format(costoIngredientes)}</span>
             <span>Costo envase: {formatoMoneda.format(costoEnvase)}</span>
+            <span>Costo energía: {formatoMoneda.format(costoEnergia)}</span>
           </div>
           <p className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-400">Total de la receta completa</p>
           <div className="mt-2">
@@ -385,7 +407,7 @@ export default function RecetaForm() {
             Precio por {unidadVenta === 'kilo' ? 'kilo' : 'unidad'}
           </p>
           {divisorUnitario > 0 ? (
-            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-lg border border-gray-200 p-3">
                 <p className="text-xs text-gray-500">Costo</p>
                 <p className="text-base font-semibold text-gray-900">
@@ -403,6 +425,26 @@ export default function RecetaForm() {
                 <p className="text-base font-semibold text-gray-900">
                   {precioMargenTotal != null ? formatoMoneda.format(precioMargenTotal / divisorUnitario) : 'N/A'}
                 </p>
+              </div>
+              <div className="rounded-lg border border-dashed border-gray-300 p-3">
+                <p className="text-xs text-gray-500">Tu precio actual</p>
+                <input
+                  type="number"
+                  min="0"
+                  value={precioPropioTexto}
+                  onChange={(e) => setPrecioPropioTexto(e.target.value)}
+                  placeholder="$"
+                  className="mt-0.5 w-full rounded-md border border-gray-300 px-2 py-1 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+                {precioPropioTexto.trim() !== '' && !Number.isNaN(Number(precioPropioTexto)) && (
+                  <p
+                    className={`mt-1 text-xs font-medium ${
+                      Number(precioPropioTexto) - costoTotal / divisorUnitario >= 0 ? 'text-green-700' : 'text-red-600'
+                    }`}
+                  >
+                    Ganancia: {formatoMoneda.format(Number(precioPropioTexto) - costoTotal / divisorUnitario)}
+                  </p>
+                )}
               </div>
             </div>
           ) : (

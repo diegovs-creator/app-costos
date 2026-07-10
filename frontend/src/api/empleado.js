@@ -33,7 +33,7 @@ export const empleadoApi = {
     return { ...receta, ingredientes };
   },
 
-  async crearReceta({ nombre, categoria, lotes, ingredientes, unidadVenta, mermaPct }) {
+  async crearReceta({ nombre, categoria, lotes, ingredientes, unidadVenta, mermaPct, tiempoHorneadoMin }) {
     const { data, error } = await supabase.rpc('crear_receta_empleado', {
       p_nombre: nombre,
       p_categoria: categoria,
@@ -41,6 +41,7 @@ export const empleadoApi = {
       p_ingredientes: ingredientes,
       p_unidad_venta: unidadVenta || 'unidades',
       p_merma_pct: unidadVenta === 'kilo' ? mermaPct : null,
+      p_tiempo_horneado_min: tiempoHorneadoMin || null,
     });
     if (error) lanzarError(error.message);
     return data; // id de la receta creada

@@ -21,4 +21,24 @@ export const configuracionApi = {
 
     return data;
   },
+
+  async obtenerCostoHoraHorno() {
+    const { data, error } = await supabase.from('configuracion_negocio').select('costo_hora_horno').single();
+    if (error) lanzarError(error.message);
+    return data.costo_hora_horno;
+  },
+
+  async actualizarCostoHoraHorno(costo_hora_horno) {
+    if (costo_hora_horno == null || costo_hora_horno < 0) lanzarError('Costo por hora invalido');
+
+    const { data, error } = await supabase
+      .from('configuracion_negocio')
+      .update({ costo_hora_horno })
+      .eq('id', true)
+      .select('costo_hora_horno')
+      .single();
+    if (error) lanzarError(error.message);
+
+    return data.costo_hora_horno;
+  },
 };

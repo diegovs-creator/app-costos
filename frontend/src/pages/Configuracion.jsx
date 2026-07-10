@@ -6,6 +6,8 @@ export default function Configuracion() {
   const [margenes, setMargenes] = useState(null);
   const [valores, setValores] = useState({});
   const [guardandoCategoria, setGuardandoCategoria] = useState(null);
+  const [costoHoraHorno, setCostoHoraHorno] = useState('');
+  const [guardandoEnergia, setGuardandoEnergia] = useState(false);
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
 
@@ -19,6 +21,11 @@ export default function Configuracion() {
         setValores(mapa);
       })
       .catch(() => setError('No se pudo conectar con el backend.'));
+
+    configuracionApi
+      .obtenerCostoHoraHorno()
+      .then((valor) => setCostoHoraHorno(String(valor)))
+      .catch(() => {});
   }, []);
 
   async function guardar(categoria) {
@@ -36,6 +43,24 @@ export default function Configuracion() {
       setError(err.response?.data?.error || 'No se pudo guardar el margen.');
     } finally {
       setGuardandoCategoria(null);
+    }
+  }
+
+  async function guardarEnergia() {
+    setError('');
+    setMensaje('');
+    const nuevoValor = Number(costoHoraHorno);
+    if (Number.isNaN(nuevoValor) || nuevoValor < 0) {
+      return setError('El costo por hora debe ser un numero mayor o igual a 0.');
+    }
+    setGuardandoEnergia(true);
+    try {
+      await configuracionApi.actualizarCostoHoraHorno(nuevoValor);
+      setMensaje('Costo de energía actualizado.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo guardar el costo de energía.');
+    } finally {
+      setGuardandoEnergia(false);
     }
   }
 
@@ -88,9 +113,42 @@ export default function Configuracion() {
         </div>
       )}
 
+      <div className="rounded-xl border border-gray-200 bg-white p-5">
+        <h2 className="text-sm font-semibold text-gray-900">Costo de energía (gas del horno)</h2>
+        <p className="mt-1 text-xs text-gray-500">
+          Cuánto te sale, en promedio, cada hora de horno prendido. Un cálculo simple: precio de una garrafa ÷
+          cuántas horas de horno te dura. Con esto, cada receta calcula sola su costo de energía según el tiempo de
+          horneado que le cargues.
+        </p>
+        <div className="mt-4 flex items-center gap-2">
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+              $
+            </span>
+            <input
+              type="number"
+              min="0"
+              value={costoHoraHorno}
+              onChange={(e) => setCostoHoraHorno(e.target.value)}
+              className="w-40 rounded-lg border border-gray-300 py-2 pl-7 pr-3 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+          </div>
+          <span className="text-sm text-gray-500">por hora</span>
+          <button
+            type="button"
+            onClick={guardarEnergia}
+            disabled={guardandoEnergia}
+            className="rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+          >
+            {guardandoEnergia ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+
       <p className="text-xs text-gray-400">
-        Cambiar el margen base acá no modifica recetas ya creadas — solo aplica como valor sugerido para recetas
-        nuevas. Para cambiar el precio de un producto existente, usá la Calculadora de precios o editá la receta.
+        Cambiar el margen base o el costo de energía acá no modifica recetas ya creadas — solo aplica como valor
+        sugerido para recetas nuevas. Para cambiar el precio de un producto existente, usá la Calculadora de precios
+        o editá la receta.
       </p>
     </div>
   );

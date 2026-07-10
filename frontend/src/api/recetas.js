@@ -16,10 +16,20 @@ async function obtenerMargenBaseCategoria(categoria) {
   return data ? Number(data.margen_base) : 50;
 }
 
-// Calcula costo_total (separado ingredientes/envase) y precios derivados.
+async function obtenerCostoHoraHorno() {
+  const { data } = await supabase.from('configuracion_negocio').select('costo_hora_horno').single();
+  return data ? Number(data.costo_hora_horno) : 0;
+}
+
+async function calcularCostoEnergia(tiempo_horneado_min) {
+  const costoHoraHorno = await obtenerCostoHoraHorno();
+  return Number((((tiempo_horneado_min || 0) / 60) * costoHoraHorno).toFixed(2));
+}
+
+// Calcula costo_total (ingredientes/envase/energia) y precios derivados.
 // Antes vivia en backend/src/routes/recetas.js (calcularCostos); ahora corre
 // en el navegador porque ya no hay backend.
-async function calcularCostos({ ingredientes, categoria, margen_base, margen_individual }) {
+async function calcularCostos({ ingredientes, categoria, margen_base, margen_individual, tiempo_horneado_min }) {
   const ids = ingredientes.map((i) => i.ingrediente_id);
   const { data: filas, error } = await supabase.from('ingredientes').select('*').in('id', ids);
   if (error) lanzarError(error.message);
@@ -46,14 +56,24 @@ async function calcularCostos({ ingredientes, categoria, margen_base, margen_ind
 
   costoIngredientes = Number(costoIngredientes.toFixed(2));
   costoEnvase = Number(costoEnvase.toFixed(2));
-  const costoTotal = Number((costoIngredientes + costoEnvase).toFixed(2));
+  const costoEnergia = await calcularCostoEnergia(tiempo_horneado_min);
+  const costoTotal = Number((costoIngredientes + costoEnvase + costoEnergia).toFixed(2));
 
   const margenAplicado = margen_individual ?? margen_base ?? (await obtenerMargenBaseCategoria(categoria));
   const precioMarkup = calcularPrecioMarkup(costoTotal, margenAplicado);
   const precioMargen = calcularPrecioMargen(costoTotal, margenAplicado);
   const gananciaEstimada = Number(((precioMargen ?? precioMarkup) - costoTotal).toFixed(2));
 
-  return { costoIngredientes, costoEnvase, costoTotal, detalle, precioMarkup, precioMargen, gananciaEstimada };
+  return {
+    costoIngredientes,
+    costoEnvase,
+    costoEnergia,
+    costoTotal,
+    detalle,
+    precioMarkup,
+    precioMargen,
+    gananciaEstimada,
+  };
 }
 
 function mapearFilaIngrediente(row) {
@@ -106,8 +126,22 @@ export const recetasApi = {
       lanzarError('Porcentaje de merma invalido');
     }
 
-    const { costoIngredientes, costoEnvase, costoTotal, detalle, precioMarkup, precioMargen, gananciaEstimada } =
-      await calcularCostos({ ingredientes, categoria, margen_base, margen_individual });
+    const {
+      costoIngredientes,
+      costoEnvase,
+      costoEnergia,
+      costoTotal,
+      detalle,
+      precioMarkup,
+      precioMargen,
+      gananciaEstimada,
+    } = await calcularCostos({
+      ingredientes,
+      categoria,
+      margen_base,
+      margen_individual,
+      tiempo_horneado_min: payload.tiempo_horneado_min,
+    });
 
     const { data: creada, error } = await supabase
       .from('recetas')
@@ -117,8 +151,10 @@ export const recetasApi = {
         lotes: lotes || 1,
         unidad_venta,
         merma_pct,
+        tiempo_horneado_min: payload.tiempo_horneado_min ?? null,
         costo_ingredientes: costoIngredientes,
         costo_envase: costoEnvase,
+        costo_energia: costoEnergia,
         costo_total: costoTotal,
         margen_base: margen_base || (await obtenerMargenBaseCategoria(categoria)),
         margen_individual: margen_individual ?? null,
@@ -159,8 +195,13 @@ export const recetasApi = {
       lanzarError('Porcentaje de merma invalido');
     }
 
+    const tiempoHorneadoFinal = payload.tiempo_horneado_min ?? existente.tiempo_horneado_min;
+    const tiempoHorneadoCambio =
+      payload.tiempo_horneado_min !== undefined && payload.tiempo_horneado_min !== existente.tiempo_horneado_min;
+
     let costoIngredientes = existente.costo_ingredientes;
     let costoEnvase = existente.costo_envase;
+    let costoEnergia = existente.costo_energia;
     let costoTotal = existente.costo_total;
     let precioMarkup = existente.precio_markup;
     let precioMargen = existente.precio_margen;
@@ -173,17 +214,24 @@ export const recetasApi = {
         categoria: categoriaFinal,
         margen_base: margen_base ?? existente.margen_base,
         margen_individual: margen_individual ?? existente.margen_individual,
+        tiempo_horneado_min: tiempoHorneadoFinal,
       });
       costoIngredientes = resultado.costoIngredientes;
       costoEnvase = resultado.costoEnvase;
+      costoEnergia = resultado.costoEnergia;
       costoTotal = resultado.costoTotal;
       precioMarkup = resultado.precioMarkup;
       precioMargen = resultado.precioMargen;
       gananciaEstimada = resultado.gananciaEstimada;
       detalle = resultado.detalle;
-    } else if (margen_base != null || margen_individual != null) {
-      // No se reenviaron ingredientes (ej: desde la Calculadora), pero cambio
-      // el margen: igual hay que recalcular precios sobre el costo ya guardado.
+    } else if (margen_base != null || margen_individual != null || tiempoHorneadoCambio) {
+      // No se reenviaron ingredientes (ej: desde la Calculadora, o solo cambio
+      // el tiempo de horneado): igual hay que recalcular energia/precios sobre
+      // el costo de ingredientes/envase que ya estaba guardado.
+      if (tiempoHorneadoCambio) {
+        costoEnergia = await calcularCostoEnergia(tiempoHorneadoFinal);
+        costoTotal = Number((costoIngredientes + costoEnvase + costoEnergia).toFixed(2));
+      }
       const margenAplicado =
         margen_individual ?? margen_base ?? existente.margen_individual ?? existente.margen_base;
       precioMarkup = calcularPrecioMarkup(costoTotal, margenAplicado);
@@ -199,8 +247,10 @@ export const recetasApi = {
         lotes: lotes ?? existente.lotes,
         unidad_venta,
         merma_pct,
+        tiempo_horneado_min: tiempoHorneadoFinal,
         costo_ingredientes: costoIngredientes,
         costo_envase: costoEnvase,
+        costo_energia: costoEnergia,
         costo_total: costoTotal,
         margen_base: margen_base ?? existente.margen_base,
         margen_individual: margen_individual ?? existente.margen_individual,

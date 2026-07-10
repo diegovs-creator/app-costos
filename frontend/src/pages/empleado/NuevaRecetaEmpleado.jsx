@@ -18,6 +18,7 @@ export default function NuevaRecetaEmpleado() {
   const [unidadVenta, setUnidadVenta] = useState('unidades');
   const [lotes, setLotes] = useState('1');
   const [mermaPct, setMermaPct] = useState('10');
+  const [tiempoHorneadoMin, setTiempoHorneadoMin] = useState('');
   const [filas, setFilas] = useState([filaVacia()]);
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -77,6 +78,7 @@ export default function NuevaRecetaEmpleado() {
         unidadVenta,
         lotes: Number(lotes) || 1,
         mermaPct: mermaNum,
+        tiempoHorneadoMin: tiempoHorneadoMin.trim() === '' ? null : Number(tiempoHorneadoMin) || 0,
         ingredientes: ingredientesPayload,
       });
       navigate('/');
@@ -184,6 +186,20 @@ export default function NuevaRecetaEmpleado() {
               </div>
             </>
           )}
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Tiempo de horneado (min) <span className="font-normal text-gray-400">(opcional)</span>
+            </span>
+            <input
+              type="number"
+              min="0"
+              value={tiempoHorneadoMin}
+              onChange={(e) => setTiempoHorneadoMin(e.target.value)}
+              placeholder="Ej: 40"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+          </label>
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-5">
