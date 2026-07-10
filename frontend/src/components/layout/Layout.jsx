@@ -7,6 +7,8 @@ const NAV_ITEMS = [
   { to: '/ingredientes', label: 'Ingredientes', icon: '🧂' },
   { to: '/recetas', label: 'Recetas / Productos', icon: '🍞' },
   { to: '/calculadora', label: 'Calculadora de precios', icon: '🧮' },
+  { to: '/produccion', label: 'Producción', icon: '📦' },
+  { to: '/costos-fijos', label: 'Costos Fijos', icon: '🏠' },
   { to: '/reportes', label: 'Reportes', icon: '📈' },
   { to: '/configuracion', label: 'Configuración', icon: '⚙️' },
 ];

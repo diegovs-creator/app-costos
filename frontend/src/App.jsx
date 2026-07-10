@@ -9,6 +9,8 @@ import RecetaForm from './pages/RecetaForm';
 import Calculadora from './pages/Calculadora';
 import Reportes from './pages/Reportes';
 import Configuracion from './pages/Configuracion';
+import CostosFijos from './pages/CostosFijos';
+import Produccion from './pages/Produccion';
 import LayoutEmpleado from './components/empleado/LayoutEmpleado';
 import RecetasEmpleado from './pages/empleado/RecetasEmpleado';
 import RecetaEmpleadoDetalle from './pages/empleado/RecetaEmpleadoDetalle';
@@ -36,6 +38,7 @@ export default function App() {
           <Route index element={<RecetasEmpleado />} />
           <Route path="nueva" element={<NuevaRecetaEmpleado />} />
           <Route path="recetas/:id" element={<RecetaEmpleadoDetalle />} />
+          <Route path="produccion" element={<Produccion />} />
         </Route>
       </Routes>
     );
@@ -50,6 +53,8 @@ export default function App() {
         <Route path="recetas/nueva" element={<RecetaForm />} />
         <Route path="recetas/:id" element={<RecetaForm />} />
         <Route path="calculadora" element={<Calculadora />} />
+        <Route path="produccion" element={<Produccion />} />
+        <Route path="costos-fijos" element={<CostosFijos />} />
         <Route path="reportes" element={<Reportes />} />
         <Route path="configuracion" element={<Configuracion />} />
       </Route>

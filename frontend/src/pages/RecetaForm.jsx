@@ -46,8 +46,6 @@ export default function RecetaForm() {
   const [unidadVenta, setUnidadVenta] = useState('unidades');
   const [lotes, setLotes] = useState('1');
   const [mermaPct, setMermaPct] = useState('10');
-  const [tiempoHorneadoMin, setTiempoHorneadoMin] = useState('');
-  const [costoHoraHorno, setCostoHoraHorno] = useState(0);
   const [filas, setFilas] = useState([filaVacia()]);
   const [margenPct, setMargenPct] = useState('50');
   const [margenesPorCategoria, setMargenesPorCategoria] = useState({});
@@ -66,7 +64,6 @@ export default function RecetaForm() {
       setMargenesPorCategoria(mapa);
       if (!esEdicion && mapa['Pasteleria'] != null) setMargenPct(String(mapa['Pasteleria']));
     });
-    configuracionApi.obtenerCostoHoraHorno().then(setCostoHoraHorno).catch(() => {});
   }, [esEdicion]);
 
   useEffect(() => {
@@ -79,7 +76,6 @@ export default function RecetaForm() {
         setUnidadVenta(receta.unidad_venta || 'unidades');
         setLotes(String(receta.lotes));
         if (receta.merma_pct != null) setMermaPct(String(receta.merma_pct));
-        if (receta.tiempo_horneado_min != null) setTiempoHorneadoMin(String(receta.tiempo_horneado_min));
         setMargenPct(String(receta.margen_individual ?? receta.margen_base));
         setFilas(
           receta.ingredientes.length > 0 ? receta.ingredientes.map(filaDesdeIngredienteReceta) : [filaVacia()]
@@ -140,8 +136,7 @@ export default function RecetaForm() {
   const costoEnvase = filasConCosto
     .filter((f) => f.ingrediente && f.ingrediente.tipo === 'envase' && f.costo != null)
     .reduce((acc, f) => acc + f.costo, 0);
-  const costoEnergia = ((Number(tiempoHorneadoMin) || 0) / 60) * costoHoraHorno;
-  const costoTotal = costoIngredientes + costoEnvase + costoEnergia;
+  const costoTotal = costoIngredientes + costoEnvase;
 
   const pesoCrudoKg = useMemo(() => calcularPesoTotalKg(filasConCosto), [filasConCosto]);
   const mermaNum = Number(mermaPct) || 0;
@@ -179,7 +174,6 @@ export default function RecetaForm() {
       unidad_venta: unidadVenta,
       lotes: Number(lotes) || 1,
       merma_pct: unidadVenta === 'kilo' ? mermaNum : null,
-      tiempo_horneado_min: tiempoHorneadoMin.trim() === '' ? null : Number(tiempoHorneadoMin) || 0,
       margen_base: Number(margenPct) || 0,
       precio_final,
       ingredientes: filasValidas.map((f) => ({
@@ -310,20 +304,6 @@ export default function RecetaForm() {
               </div>
             </>
           )}
-
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Tiempo de horneado (min) <span className="font-normal text-gray-400">(opcional, para el costo de energía)</span>
-            </span>
-            <input
-              type="number"
-              min="0"
-              value={tiempoHorneadoMin}
-              onChange={(e) => setTiempoHorneadoMin(e.target.value)}
-              placeholder="Ej: 40"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-          </label>
         </div>
 
         {/* Ingredientes */}
@@ -388,7 +368,6 @@ export default function RecetaForm() {
           <div className="mt-3 flex flex-wrap gap-4 text-xs text-gray-500">
             <span>Costo ingredientes: {formatoMoneda.format(costoIngredientes)}</span>
             <span>Costo envase: {formatoMoneda.format(costoEnvase)}</span>
-            <span>Costo energía: {formatoMoneda.format(costoEnergia)}</span>
           </div>
           <p className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-400">Total de la receta completa</p>
           <div className="mt-2">
