@@ -9,9 +9,13 @@ import RecetaForm from './pages/RecetaForm';
 import Calculadora from './pages/Calculadora';
 import Reportes from './pages/Reportes';
 import Configuracion from './pages/Configuracion';
+import LayoutEmpleado from './components/empleado/LayoutEmpleado';
+import RecetasEmpleado from './pages/empleado/RecetasEmpleado';
+import RecetaEmpleadoDetalle from './pages/empleado/RecetaEmpleadoDetalle';
+import NuevaRecetaEmpleado from './pages/empleado/NuevaRecetaEmpleado';
 
 export default function App() {
-  const { sesion, cargando } = useAuth();
+  const { sesion, rol, cargando } = useAuth();
 
   if (cargando) {
     return (
@@ -23,6 +27,18 @@ export default function App() {
 
   if (!sesion) {
     return <Login />;
+  }
+
+  if (rol === 'empleado') {
+    return (
+      <Routes>
+        <Route element={<LayoutEmpleado />}>
+          <Route index element={<RecetasEmpleado />} />
+          <Route path="nueva" element={<NuevaRecetaEmpleado />} />
+          <Route path="recetas/:id" element={<RecetaEmpleadoDetalle />} />
+        </Route>
+      </Routes>
+    );
   }
 
   return (
