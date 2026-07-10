@@ -1,0 +1,7 @@
+{
+  "name": "app-costos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App de gestion de costos y margenes para panaderia, pasteleria y comida rapida (frontend + Supabase)",
+  "scripts": {}
+}

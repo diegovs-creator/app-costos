@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p backend/src/db backend/src/routes backend/src/utils backend/data frontend)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\diego\\app-costos\\backend\\src"
+    ]
+  }
+}
