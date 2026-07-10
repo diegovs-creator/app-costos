@@ -3,6 +3,7 @@ import { recetasApi } from '../../api/client';
 import { produccionApi } from '../../api/produccion';
 import { costosFijosApi } from '../../api/costosFijos';
 import { formatoMoneda } from '../../utils/formato';
+import { valoresUnitarios } from '../../utils/calculosReceta';
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -17,19 +18,6 @@ function haceDiasISO(dias) {
 function diasEnRango(desde, hasta) {
   const ms = new Date(hasta) - new Date(desde);
   return Math.max(1, Math.round(ms / (1000 * 60 * 60 * 24)) + 1);
-}
-
-// Costo y precio de referencia por unidad/kilo de una receta, a partir de
-// lo que ya tiene guardado (costo_total y precio del lote completo).
-function valoresUnitarios(receta) {
-  if (!receta) return { costoUnitario: 0, precioUnitario: 0 };
-  const divisor = receta.unidad_venta === 'kilo' ? receta.peso_final_kg : receta.lotes;
-  if (!divisor || divisor <= 0) return { costoUnitario: 0, precioUnitario: 0 };
-  const precioReferenciaTotal = receta.precio_final ?? receta.precio_margen ?? receta.precio_markup ?? 0;
-  return {
-    costoUnitario: receta.costo_total / divisor,
-    precioUnitario: precioReferenciaTotal / divisor,
-  };
 }
 
 export default function Administracion() {

@@ -43,6 +43,23 @@ export const produccionApi = {
     return data;
   },
 
+  // Para cargar (o corregir) la perdida de un registro ya existente, tipicamente
+  // al cerrar el local, sin tener que saberla en el momento de cargar produccion.
+  async actualizar(id, { cantidad_perdida, motivo_perdida }) {
+    const perdida = cantidad_perdida || 0;
+    if (perdida < 0) lanzarError('La cantidad perdida no puede ser negativa.');
+    if (perdida > 0 && !motivo_perdida) lanzarError('Elegí el motivo de la pérdida.');
+
+    const { data, error } = await supabase
+      .from('produccion_diaria')
+      .update({ cantidad_perdida: perdida, motivo_perdida: perdida > 0 ? motivo_perdida : null })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) lanzarError(error.message);
+    return data;
+  },
+
   async eliminar(id) {
     const { error } = await supabase.from('produccion_diaria').delete().eq('id', id);
     if (error) lanzarError(error.message);

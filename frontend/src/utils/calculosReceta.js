@@ -39,6 +39,20 @@ export function calcularPrecioMargen(costo, porcentaje) {
   return costo / (1 - porcentaje / 100);
 }
 
+// Costo y precio de referencia por unidad/kilo de una receta, a partir de lo
+// que ya tiene guardado (costo_total y precio del lote completo). Se usa en
+// Reportes > Administracion y en Produccion (solo para el propietario).
+export function valoresUnitarios(receta) {
+  if (!receta) return { costoUnitario: 0, precioUnitario: 0 };
+  const divisor = receta.unidad_venta === 'kilo' ? receta.peso_final_kg : receta.lotes;
+  if (!divisor || divisor <= 0) return { costoUnitario: 0, precioUnitario: 0 };
+  const precioReferenciaTotal = receta.precio_final ?? receta.precio_margen ?? receta.precio_markup ?? 0;
+  return {
+    costoUnitario: receta.costo_total / divisor,
+    precioUnitario: precioReferenciaTotal / divisor,
+  };
+}
+
 // Peso total (en kg) de las filas de una receta, para el modo de venta "por kilo".
 // Suma kg/g directo y l/ml como si fuera kg (1 litro ~ 1kg). Nunca cuenta
 // envases ni ingredientes medidos en "unidades" (no tienen peso convertible).
